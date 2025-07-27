@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 
-import json
-import os
-import sys
 import asyncio
-import pathlib
-import websockets
 import concurrent.futures
+import json
 import logging
-from vosk import Model, SpkModel, KaldiRecognizer
+import os
+import ssl
+import sys
+
+import websockets
+from vosk import Model, SpkModel, KaldiRecognizer, GpuInit, GpuThreadInit
+
+from extractor import NumberExtractor
+
 
 def process_chunk(rec, message):
     if message == '{"eof" : 1}':
@@ -19,6 +23,21 @@ def process_chunk(rec, message):
         return rec.Result(), False
     else:
         return rec.PartialResult(), False
+
+
+def correct_number(response, stop):
+    extractor = NumberExtractor()
+    data = json.loads(response)
+    if 'result' in data:
+        if 'text' in data:
+            guess, mask = extractor.replace(data['text'], apply_regrouping=True)
+            data['text'] = guess
+            return json.dumps(data, ensure_ascii=False), stop
+        else:
+            return response, stop
+    else:
+        return response, stop
+
 
 async def recognize(websocket, path):
     global model
@@ -33,7 +52,7 @@ async def recognize(websocket, path):
     show_words = args.show_words
     max_alternatives = args.max_alternatives
 
-    logging.info('Connection from %s', websocket.remote_address);
+    logging.info('Connection from %s', websocket.remote_address)
 
     while True:
 
@@ -70,12 +89,16 @@ async def recognize(websocket, path):
 
         response, stop = await loop.run_in_executor(pool, process_chunk, rec, message)
         await websocket.send(response)
-        if stop: break
+        if stop:
+            logging.info('Closing connection from %s', websocket.remote_address)
+            break
 
+
+def thread_init():
+    GpuThreadInit()
 
 
 async def start():
-
     global model
     global spk_model
     global args
@@ -86,7 +109,9 @@ async def start():
     # logger = logging.getLogger('websockets')
     # logger.setLevel(logging.INFO)
     # logger.addHandler(logging.StreamHandler())
-    logging.basicConfig(level=logging.INFO)
+    # logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S')
 
     args = type('', (), {})()
 
@@ -98,24 +123,35 @@ async def start():
     args.max_alternatives = int(os.environ.get('VOSK_ALTERNATIVES', 0))
     args.show_words = bool(os.environ.get('VOSK_SHOW_WORDS', True))
 
+    args.use_ssl = bool(os.environ.get('VOSK_USE_SSL', False))
+
     if len(sys.argv) > 1:
-       args.model_path = sys.argv[1]
+        args.model_path = sys.argv[1]
 
     # Gpu part, uncomment if vosk-api has gpu support
     #
     # from vosk import GpuInit, GpuInstantiate
-    # GpuInit()
+    GpuInit()
     # def thread_init():
     #     GpuInstantiate()
-    # pool = concurrent.futures.ThreadPoolExecutor(initializer=thread_init)
+    pool = concurrent.futures.ThreadPoolExecutor(initializer=thread_init)
 
     model = Model(args.model_path)
     spk_model = SpkModel(args.spk_model_path) if args.spk_model_path else None
 
-    pool = concurrent.futures.ThreadPoolExecutor((os.cpu_count() or 1))
+    # pool = concurrent.futures.ThreadPoolExecutor((os.cpu_count() or 1))
 
-    async with websockets.serve(recognize, args.interface, args.port):
-        await asyncio.Future()
+    logging.info('websocket server started.')
+    if args.use_ssl:
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_cert = "/opt/cert/fullchain.pem"
+        ssl_key = "/opt/cert/privkey.pem"
+        ssl_context.load_cert_chain(ssl_cert, ssl_key)
+        async with websockets.serve(recognize, args.interface, args.port, ssl=ssl_context):
+            await asyncio.Future()
+    else:
+        async with websockets.serve(recognize, args.interface, args.port):
+            await asyncio.Future()
 
 
 if __name__ == '__main__':
