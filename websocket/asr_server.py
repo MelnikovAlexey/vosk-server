@@ -16,13 +16,15 @@ from extractor import NumberExtractor
 
 def process_chunk(rec, message):
     if message == '{"eof" : 1}':
-        return rec.FinalResult(), True
+        final_message = rec.FinalResult()
+        logging.info(final_message)
+        return correct_number(final_message, True)
     if message == '{"reset" : 1}':
-        return rec.FinalResult(), False
+        return correct_number(rec.FinalResult(), False)
     elif rec.AcceptWaveform(message):
-        return rec.Result(), False
+        return correct_number(rec.Result(), False)
     else:
-        return rec.PartialResult(), False
+        return correct_number(rec.PartialResult(), False)
 
 
 def correct_number(response, stop):
@@ -39,7 +41,7 @@ def correct_number(response, stop):
         return response, stop
 
 
-async def recognize(websocket, path):
+async def recognize(websocket):
     global model
     global spk_model
     global args
