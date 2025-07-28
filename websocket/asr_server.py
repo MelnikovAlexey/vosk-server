@@ -133,6 +133,7 @@ async def start():
     # Gpu part, uncomment if vosk-api has gpu support
     #
     # from vosk import GpuInit, GpuInstantiate
+    logging.info('Init GPU Start')
     GpuInit()
     # def thread_init():
     #     GpuInstantiate()
