@@ -5,6 +5,7 @@ import concurrent.futures
 import json
 import logging
 import os
+import ssl
 import sys
 
 import websockets
@@ -96,7 +97,6 @@ async def recognize(websocket):
 
 
 def thread_init():
-    logging.info('INIT GPU THREADS')
     GpuThreadInit()
 
 
@@ -125,7 +125,7 @@ async def start():
     args.max_alternatives = int(os.environ.get('VOSK_ALTERNATIVES', 0))
     args.show_words = bool(os.environ.get('VOSK_SHOW_WORDS', True))
 
-   # args.use_ssl = bool(os.environ.get('VOSK_USE_SSL', False))
+    args.use_ssl = bool(os.environ.get('VOSK_USE_SSL', False))
 
     if len(sys.argv) > 1:
         args.model_path = sys.argv[1]
@@ -133,7 +133,6 @@ async def start():
     # Gpu part, uncomment if vosk-api has gpu support
     #
     # from vosk import GpuInit, GpuInstantiate
-    logging.info('Init GPU Start')
     GpuInit()
     # def thread_init():
     #     GpuInstantiate()
@@ -145,17 +144,16 @@ async def start():
     # pool = concurrent.futures.ThreadPoolExecutor((os.cpu_count() or 1))
 
     logging.info('websocket server started.')
-    #    if args.use_ssl:
-    #        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    #        ssl_cert = "/opt/cert/fullchain.pem"
-    #        ssl_key = "/opt/cert/privkey.pem"
-    #        ssl_context.load_cert_chain(ssl_cert, ssl_key)
-    #        async with websockets.serve(recognize, args.interface, args.port, ssl=ssl_context):
-    #            await asyncio.Future()
-    #    else:
-    async with websockets.serve(recognize, args.interface, args.port):
-        await asyncio.Future()
-
+    if args.use_ssl:
+        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        ssl_cert = "/opt/cert/fullchain.pem"
+        ssl_key = "/opt/cert/privkey.pem"
+        ssl_context.load_cert_chain(ssl_cert, ssl_key)
+        async with websockets.serve(recognize, args.interface, args.port, ssl=ssl_context):
+            await asyncio.Future()
+    else:
+        async with websockets.serve(recognize, args.interface, args.port):
+            await asyncio.Future()
 
 if __name__ == '__main__':
     asyncio.run(start())
