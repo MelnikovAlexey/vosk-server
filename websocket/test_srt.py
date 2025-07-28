@@ -8,10 +8,13 @@ import json
 import datetime
 import wave
 
+
 WORDS_PER_LINE = 7
 
 async def run_test(uri):
+    start = datetime.datetime.now()
     async with websockets.connect(uri) as websocket:
+        #start = datetime.datetime.now()
         wf = wave.open(sys.argv[1], "rb")
         await websocket.send('{ "config" : { "sample_rate" : %d } }' % (wf.getframerate()))
 
@@ -44,6 +47,10 @@ async def run_test(uri):
                subs.append(s)
 
         print(srt.compose(subs))
+        end = datetime.datetime.now()
+        elapsed = end - start
+        print(f'recognize time {elapsed}')
+
 
 
 asyncio.run(run_test('ws://localhost:2700'))
