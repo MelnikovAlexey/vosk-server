@@ -30,13 +30,10 @@ def process_chunk(rec, message):
 def correct_number(response, stop):
     extractor = NumberExtractor()
     data = json.loads(response)
-    if 'result' in data:
-        if 'text' in data:
-            guess, mask = extractor.replace(data['text'], apply_regrouping=True)
-            data['text'] = guess
-            return json.dumps(data, ensure_ascii=False), stop
-        else:
-            return response, stop
+    if 'text' in data:
+        guess, mask = extractor.replace(data['text'], apply_regrouping=True)
+        data['text'] = guess
+        return json.dumps(data, ensure_ascii=False), stop
     else:
         return response, stop
 
